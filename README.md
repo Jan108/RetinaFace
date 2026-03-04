@@ -1,3 +1,18 @@
+# Training of RetineFace for AFaRec
+
+This repository is used in the [AFaRec System](https://github.com/Jan108/AFaRec) to train and predict RetinaFace.
+
+## Reproduction Quicksteps
+Clone Repo and use Python 3.11.x
+1. Run ```pip install -r requirements.txt```
+2. Alter the Path in [train_predict_retinaface.sh](train_predict_retinaface.sh)
+3. Download [weights](#-get-pretrained-models) into directory.
+4. Run ```bash train_predict_retinaface.sh```
+
+
+Below is the old README.
+
+
 # 📸 RetinaFace: Single-stage Dense Face Localisation in the Wild
 
 [![Downloads](https://img.shields.io/github/downloads/yakhyo/retinaface-pytorch/total)](https://github.com/yakhyo/retinaface-pytorch/releases)

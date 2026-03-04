@@ -66,6 +66,12 @@ def parse_arguments():
         default='./data/widerface/val/images/',
         help='Path to the dataset folder'
     )
+    parser.add_argument(
+        '--dataset-labels',
+        type=str,
+        default='./data/widerface/val/wider_val.txt',
+        help='Path to the dataset labels'
+    )
 
     return parser.parse_args()
 
@@ -118,10 +124,12 @@ def main(params):
 
     # testing dataset
     testset_folder = params.dataset_folder
-    testset_list = params.dataset_folder[:-7] + "wider_val.txt"
+    testset_list = params.dataset_labels
 
     with open(testset_list, 'r') as fr:
-        test_dataset = fr.read().split()
+        test_dataset = [
+            line.strip().split()[1] for line in fr if line.strip().startswith('#')
+        ]
     num_images = len(test_dataset)
 
     # testing begin
@@ -189,10 +197,10 @@ def main(params):
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         with open(save_name, "w") as fd:
-            file_name = os.path.basename(save_name)[:-4] + "\n"
-            bboxs_num = str(len(detections)) + "\n"
-            fd.write(file_name)
-            fd.write(bboxs_num)
+            # file_name = os.path.basename(save_name)[:-4] + "\n"
+            # bboxs_num = str(len(detections)) + "\n"
+            # fd.write(file_name)
+            # fd.write(bboxs_num)
             for box in detections:
                 x = int(box[0])
                 y = int(box[1])
@@ -201,7 +209,8 @@ def main(params):
                 confidence = str(box[4])
                 fd.write(f"{x} {y} {w} {h} {confidence}\n")
 
-        print('im_detect: {:d}/{:d} forward_pass_time: {:.4f}s'.format(idx + 1, num_images, forward_pass))
+        if idx % 20 == 0:
+            print('im_detect: {:d}/{:d} forward_pass_time: {:.4f}s'.format(idx + 1, num_images, forward_pass))
 
 
 if __name__ == '__main__':

@@ -19,10 +19,16 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description='Training Arguments for RetinaFace')
     parser.add_argument(
-        '--train-data',
+        '--train-data-labels',
         type=str,
-        default='./data/widerface/train',
-        help='Path to the training dataset directory.'
+        default='./data/widerface/train/label.txt',
+        help='Path to the training dataset label file.'
+    )
+    parser.add_argument(
+        '--train-data-images',
+        type=str,
+        default='./data/widerface/train/images',
+        help='Path to the training dataset images directory.'
     )
     parser.add_argument(
         '--network',
@@ -40,6 +46,7 @@ def parse_args():
     parser.add_argument('--num-classes', type=int, default=2, help='Number of classes in the dataset.')
     parser.add_argument('--batch-size', default=32, type=int, help='Number of samples in each batch during training.')
     parser.add_argument('--print-freq', type=int, default=10, help='Print frequency during training.')
+    parser.add_argument('--weights', type=str, help='Path to the trained state_dict file')
 
     # Optimizer and scheduler arguments
     parser.add_argument('--learning-rate', default=1e-3, type=float, help='Initial learning rate.')
@@ -126,7 +133,8 @@ def main(params):
     os.makedirs(params.save_dir, exist_ok=True)
 
     # Prepare dataset and data loaders
-    dataset = WiderFaceDetection(params.train_data, Augmentation(cfg['image_size'], rgb_mean))
+    dataset = WiderFaceDetection(
+        params.train_data_images, params.train_data_labels, Augmentation(cfg['image_size'], rgb_mean))
     data_loader = DataLoader(
         dataset,
         batch_size=params.batch_size,
@@ -149,6 +157,12 @@ def main(params):
     # Initialize model
     model = RetinaFace(cfg=cfg)
     model.to(device)
+
+    # loading state_dict
+    if params.weights:
+        state_dict = torch.load(params.weights, map_location=device, weights_only=True)
+        model.load_state_dict(state_dict)
+        print("Model loaded successfully!")
 
     # Optimizer
     parameters = model.parameters()

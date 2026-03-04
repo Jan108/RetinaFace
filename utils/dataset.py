@@ -7,15 +7,16 @@ import torch.utils.data as data
 
 
 class WiderFaceDetection(data.Dataset):
-    def __init__(self, root: str, transform=None):
-        self.root = root
+    def __init__(self, img_root: str, label_file: str, transform=None):
+        self.img_root = img_root
+        self.label_file = label_file
         self.transform = transform
         self.image_paths = []
         self.words = []
-        self._parse_labels(self.root)
+        self._parse_labels()
 
-    def _parse_labels(self, root):
-        with open(os.path.join(root, 'label.txt'), 'r') as f:
+    def _parse_labels(self):
+        with open(self.label_file, 'r') as f:
             lines = f.read().splitlines()
 
         labels = []
@@ -24,7 +25,7 @@ class WiderFaceDetection(data.Dataset):
                 if labels:
                     self.words.append(labels.copy())
                     labels.clear()
-                image_path = os.path.join(root, 'images', line[2:])
+                image_path = os.path.join(self.img_root, line.split()[1])
                 self.image_paths.append(image_path)
             else:
                 labels.append([float(x) for x in line.split(' ')])

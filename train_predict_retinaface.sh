@@ -10,6 +10,7 @@ for backbone in "resnet18" "resnet34" "mobilenetv2"; do
       --weights "$(dirname "$0")/weights/retinaface_${backbone}.pth" \
       --network $backbone \
       --batch-size 8 \
+      --learning-rate 1e-4 \
       --print-freq 40 \
       --save-dir "./work_dir/retinaface_${backbone}_${cls}/"
 

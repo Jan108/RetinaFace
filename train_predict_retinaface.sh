@@ -14,6 +14,7 @@ for backbone in "resnet18" "resnet34" "mobilenetv2"; do
       --print-freq 40 \
       --save-dir "./work_dir/retinaface_${backbone}_${cls}/"
 
+    echo "Start prediction for RetinaFace ${backbone} for class ${cls}"
     PYTHONPATH='/mnt/data/afarec/code/face_detection/RetinaFace/':$PYTHONPATH \
     python /mnt/data/afarec/code/face_detection/RetinaFace/evaluate_widerface.py \
       -w "$(dirname "$0")/work_dir/retinaface_${backbone}_${cls}/${backbone}_final.pth" \
@@ -24,6 +25,7 @@ for backbone in "resnet18" "resnet34" "mobilenetv2"; do
       --dataset-labels "/mnt/data/afarec/data/OAFI_full/labels_yunet/labels_${cls}_test.txt"
   done
 
+  echo "Start training for RetinaFace ${backbone} for baseline"
   PYTHONPATH='/mnt/data/afarec/code/face_detection/RetinaFace/':$PYTHONPATH \
   python /mnt/data/afarec/code/face_detection/RetinaFace/evaluate_widerface.py \
     -w "$(dirname "$0")/weights/retinaface_${backbone}.pth" \

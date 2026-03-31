@@ -1,10 +1,13 @@
+import datetime
 import os
+from itertools import islice, cycle
 import cv2
 import time
 import argparse
 import numpy as np
 
 import torch
+from tqdm import tqdm
 
 from layers import PriorBox
 from config import get_config
@@ -72,6 +75,7 @@ def parse_arguments():
         default='./data/widerface/val/wider_val.txt',
         help='Path to the dataset labels'
     )
+    parser.add_argument("--latency_test", type=int, help="Amount of images for the latency test")
 
     return parser.parse_args()
 
@@ -132,85 +136,126 @@ def main(params):
         ]
     num_images = len(test_dataset)
 
-    # testing begin
-    for idx, img_name in enumerate(test_dataset):
-        image_path = testset_folder + img_name
-        img_raw = cv2.imread(image_path, cv2.IMREAD_COLOR)
-        image = np.float32(img_raw)
+    if params.latency_test is not None:
+        latency_amount = params.latency_test
+        inf_times = []
+        prewarm = 0
 
-        # Determine resize factor
-        resize_factor = 1 if params.origin_size else resize_image(image)
+        # testing begin
+        for idx, img_name in tqdm(islice(cycle(enumerate(test_dataset)), latency_amount+300), total=latency_amount+300):
+            image_path = testset_folder + img_name
+            img_raw = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            image = np.float32(img_raw)
 
-        if resize_factor != 1:
-            image = cv2.resize(image, None, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
+            # Determine resize factor
+            resize_factor = 1 if params.origin_size else resize_image(image)
 
-        img_height, img_width, _ = image.shape
+            if resize_factor != 1:
+                image = cv2.resize(image, None, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
 
-        # normalize image
-        image -= rgb_mean
-        image = image.transpose(2, 0, 1)  # HWC -> CHW
-        image = torch.from_numpy(image).unsqueeze(0)  # 1CHW
-        image = image.to(device)
+            img_height, img_width, _ = image.shape
 
-        # forward pass
-        st = time.time()
-        loc, conf, landmarks = inference(model, image)  # forward pass
-        forward_pass = time.time() - st
+            # normalize image
+            image -= rgb_mean
+            image = image.transpose(2, 0, 1)  # HWC -> CHW
+            image = torch.from_numpy(image).unsqueeze(0)  # 1CHW
+            image = image.to(device)
 
-        # generate anchor boxes
-        priorbox = PriorBox(cfg, image_size=(img_height, img_width))
-        priors = priorbox.generate_anchors().to(device)
+            # forward pass
+            start_time = datetime.datetime.now()
+            inference(model, image)  # forward pass
+            end_time = datetime.datetime.now()
+            prewarm += 1
+            if prewarm > 300:
+                inf_times.append(end_time - start_time)
 
-        # decode boxes and landmarks
-        boxes = decode(loc, priors, cfg['variance'])
-        landmarks = decode_landmarks(landmarks, priors, cfg['variance'])
+        avg_time = sum(inf_times, start=datetime.timedelta()) / len(inf_times)
+        print(f'Inference for {params.weights} took: {avg_time}')
+        with open(os.path.join(params.save_folder[:-9], 'timing.txt'), 'w') as file:
+            file.write(str(avg_time) + '\n')
+    else:
+        # testing begin
+        for idx, img_name in enumerate(test_dataset):
+            image_path = testset_folder + img_name
+            img_raw = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            image = np.float32(img_raw)
 
-        # scale adjustments
-        bbox_scale = torch.tensor([img_width, img_height] * 2, device=device)
-        boxes = (boxes * bbox_scale / resize_factor).cpu().numpy()
+            # Determine resize factor
+            resize_factor = 1 if params.origin_size else resize_image(image)
 
-        landmark_scale = torch.tensor([img_width, img_height] * 5, device=device)
-        landmarks = (landmarks * landmark_scale / resize_factor).cpu().numpy()
+            if resize_factor != 1:
+                image = cv2.resize(image, None, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
 
-        scores = conf.cpu().numpy()[:, 1]
+            img_height, img_width, _ = image.shape
 
-        # filter by confidence threshold
-        inds = scores > params.conf_threshold
-        boxes = boxes[inds]
-        landmarks = landmarks[inds]
-        scores = scores[inds]
+            # normalize image
+            image -= rgb_mean
+            image = image.transpose(2, 0, 1)  # HWC -> CHW
+            image = torch.from_numpy(image).unsqueeze(0)  # 1CHW
+            image = image.to(device)
 
-        # sort by scores
-        order = scores.argsort()[::-1]
-        boxes, landmarks, scores = boxes[order], landmarks[order], scores[order]
+            # forward pass
+            st = time.time()
+            start_time = datetime.datetime.now()
+            loc, conf, landmarks = inference(model, image)  # forward pass
+            end_time = datetime.datetime.now()
+            forward_pass = time.time() - st
+            inf_times.append(end_time - start_time)
 
-        # apply NMS
-        detections = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
-        keep = nms(detections, params.nms_threshold)
+            # generate anchor boxes
+            priorbox = PriorBox(cfg, image_size=(img_height, img_width))
+            priors = priorbox.generate_anchors().to(device)
 
-        detections = detections[keep]
-        landmarks = landmarks[keep]
+            # decode boxes and landmarks
+            boxes = decode(loc, priors, cfg['variance'])
+            landmarks = decode_landmarks(landmarks, priors, cfg['variance'])
 
-        # Save results
-        save_name = params.save_folder + img_name[:-4] + ".txt"
-        dirname = os.path.dirname(save_name)
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-        with open(save_name, "w") as fd:
-            # file_name = os.path.basename(save_name)[:-4] + "\n"
-            # bboxs_num = str(len(detections)) + "\n"
-            # fd.write(file_name)
-            # fd.write(bboxs_num)
-            for box in detections:
-                x = int(box[0])
-                y = int(box[1])
-                w = int(box[2]) - int(box[0])
-                h = int(box[3]) - int(box[1])
-                confidence = str(box[4])
-                fd.write(f"{x} {y} {w} {h} {confidence}\n")
+            # scale adjustments
+            bbox_scale = torch.tensor([img_width, img_height] * 2, device=device)
+            boxes = (boxes * bbox_scale / resize_factor).cpu().numpy()
 
-        if idx % 20 == 0:
-            print('im_detect: {:d}/{:d} forward_pass_time: {:.4f}s'.format(idx + 1, num_images, forward_pass))
+            landmark_scale = torch.tensor([img_width, img_height] * 5, device=device)
+            landmarks = (landmarks * landmark_scale / resize_factor).cpu().numpy()
+
+            scores = conf.cpu().numpy()[:, 1]
+
+            # filter by confidence threshold
+            inds = scores > params.conf_threshold
+            boxes = boxes[inds]
+            landmarks = landmarks[inds]
+            scores = scores[inds]
+
+            # sort by scores
+            order = scores.argsort()[::-1]
+            boxes, landmarks, scores = boxes[order], landmarks[order], scores[order]
+
+            # apply NMS
+            detections = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+            keep = nms(detections, params.nms_threshold)
+
+            detections = detections[keep]
+            landmarks = landmarks[keep]
+
+            # Save results
+            save_name = params.save_folder + img_name[:-4] + ".txt"
+            dirname = os.path.dirname(save_name)
+            if not os.path.isdir(dirname):
+                os.makedirs(dirname)
+            with open(save_name, "w") as fd:
+                # file_name = os.path.basename(save_name)[:-4] + "\n"
+                # bboxs_num = str(len(detections)) + "\n"
+                # fd.write(file_name)
+                # fd.write(bboxs_num)
+                for box in detections:
+                    x = int(box[0])
+                    y = int(box[1])
+                    w = int(box[2]) - int(box[0])
+                    h = int(box[3]) - int(box[1])
+                    confidence = str(box[4])
+                    fd.write(f"{x} {y} {w} {h} {confidence}\n")
+
+            if idx % 20 == 0:
+                print('im_detect: {:d}/{:d} forward_pass_time: {:.4f}s'.format(idx + 1, num_images, forward_pass))
 
 
 if __name__ == '__main__':

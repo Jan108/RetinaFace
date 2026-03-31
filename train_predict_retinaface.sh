@@ -23,9 +23,20 @@ for backbone in "resnet18" "resnet34" "mobilenetv2"; do
       --save-folder "$(dirname "$0")/work_dir/retinaface_${backbone}_${cls}/results/" \
       --dataset-folder "/mnt/data/afarec/data/OAFI_full/images/test/" \
       --dataset-labels "/mnt/data/afarec/data/OAFI_full/labels_yunet/labels_${cls}_test.txt"
+
+    echo "Start latency test for RetinaFace ${backbone} for class ${cls}"
+    PYTHONPATH='/mnt/data/afarec/code/face_detection/RetinaFace/':$PYTHONPATH \
+    python /mnt/data/afarec/code/face_detection/RetinaFace/evaluate_widerface.py \
+      -w "$(dirname "$0")/work_dir/retinaface_${backbone}_${cls}/${backbone}_final.pth" \
+      --network $backbone \
+      --origin-size \
+      --save-folder "$(dirname "$0")/work_dir/retinaface_${backbone}_${cls}/results/" \
+      --dataset-folder "/mnt/data/afarec/data/OAFI_full/images/test/" \
+      --dataset-labels "/mnt/data/afarec/data/OAFI_full/labels_yunet/labels_${cls}_test.txt" \
+      --latency_test 1000
   done
 
-  echo "Start training for RetinaFace ${backbone} for baseline"
+  echo "Start evaluation for RetinaFace ${backbone} for baseline"
   PYTHONPATH='/mnt/data/afarec/code/face_detection/RetinaFace/':$PYTHONPATH \
   python /mnt/data/afarec/code/face_detection/RetinaFace/evaluate_widerface.py \
     -w "$(dirname "$0")/weights/retinaface_${backbone}.pth" \
@@ -34,4 +45,15 @@ for backbone in "resnet18" "resnet34" "mobilenetv2"; do
     --save-folder "$(dirname "$0")/work_dir/retinaface_${backbone}_pretrained/results/" \
     --dataset-folder "/mnt/data/afarec/data/OAFI_full/images/test/" \
     --dataset-labels "/mnt/data/afarec/data/OAFI_full/labels_yunet/labels_all_test.txt"
+
+  echo "Start latency test for RetinaFace ${backbone} for class pretrained"
+  PYTHONPATH='/mnt/data/afarec/code/face_detection/RetinaFace/':$PYTHONPATH \
+  python /mnt/data/afarec/code/face_detection/RetinaFace/evaluate_widerface.py \
+    -w "$(dirname "$0")/weights/retinaface_${backbone}.pth" \
+    --network $backbone \
+    --origin-size \
+    --save-folder "$(dirname "$0")/work_dir/retinaface_${backbone}_pretrained/results/" \
+    --dataset-folder "/mnt/data/afarec/data/OAFI_full/images/test/" \
+    --dataset-labels "/mnt/data/afarec/data/OAFI_full/labels_yunet/labels_all_test.txt" \
+    --latency_test 1000
 done

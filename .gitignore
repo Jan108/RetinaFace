@@ -8,6 +8,7 @@ weights/*.pth
 weights/*.pt
 weights/*.ckpt
 *.onnx
+work_dir*/
 
 widerface_evaluation
 
